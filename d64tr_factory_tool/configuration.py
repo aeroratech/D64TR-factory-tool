@@ -1,0 +1,177 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+
+from .commands import CommandResult, CommandStep
+
+
+ETHERNET_PROPERTY = "persist.eth0.ip.range"
+PREVIEW_PROPERTY = "persist.video.preview.mode"
+BITRATE_PROPERTY = "persist.video.preview.bitrate"
+ENCODER_PROPERTY = "persist.video.preview.encoder"
+
+
+@dataclass(frozen=True)
+class ConfigSelection:
+    ethernet_range: str | None = None
+    preview_mode: str | None = None
+    bitrate_mbps: str | None = None
+    encoder: str | None = None
+
+
+@dataclass(frozen=True)
+class CurrentConfig:
+    ethernet_range: str | None = None
+    preview_mode: str | None = None
+    bitrate_bps: str | None = None
+    encoder: str | None = None
+
+
+class ConfigurationError(ValueError):
+    """Raised when selected configuration cannot be safely applied."""
+
+
+def _positive_decimal(text: str, unit: str) -> Decimal:
+    try:
+        value = Decimal(text.strip())
+    except (InvalidOperation, AttributeError):
+        raise ConfigurationError(f"Enter a valid positive {unit} value") from None
+    if not value.is_finite() or value <= 0:
+        raise ConfigurationError(f"Enter a valid positive {unit} value")
+    return value
+
+
+def mbps_to_bps(text: str) -> str:
+    value = _positive_decimal(text, "bitrate")
+    bps = value * Decimal("1000000")
+    if bps != bps.to_integral_value():
+        raise ConfigurationError(
+            "Bitrate must convert to a whole number of bits per second"
+        )
+    return format(bps.to_integral_value(), "f")
+
+
+def bps_to_mbps(text: str) -> str:
+    value = _positive_decimal(text, "device bitrate")
+    if value != value.to_integral_value():
+        raise ConfigurationError("Device bitrate must be a whole number")
+    mbps = value / Decimal("1000000")
+    return format(mbps.normalize(), "f")
+
+
+def build_config_read_steps(serial: str) -> tuple[CommandStep, ...]:
+    settings = (
+        ("read-ethernet", "Reading Ethernet range", ETHERNET_PROPERTY),
+        ("read-preview", "Reading preview resolution", PREVIEW_PROPERTY),
+        ("read-bitrate", "Reading preview bitrate", BITRATE_PROPERTY),
+        ("read-encoder", "Reading preview encoder", ENCODER_PROPERTY),
+    )
+    return tuple(
+        CommandStep(
+            key,
+            label,
+            "adb",
+            ("-s", serial, "shell", "getprop", property_name),
+            continue_on_error=True,
+        )
+        for key, label, property_name in settings
+    )
+
+
+def current_config_from_results(results: Sequence[CommandResult]) -> CurrentConfig:
+    values: dict[str, str | None] = {
+        "read-ethernet": None,
+        "read-preview": None,
+        "read-bitrate": None,
+        "read-encoder": None,
+    }
+    for result in results:
+        if result.step.key in values and result.success:
+            value = result.stdout.strip()
+            values[result.step.key] = value or None
+    return CurrentConfig(
+        ethernet_range=values["read-ethernet"],
+        preview_mode=values["read-preview"],
+        bitrate_bps=values["read-bitrate"],
+        encoder=values["read-encoder"],
+    )
+
+
+def build_config_apply_steps(
+    serial: str, selection: ConfigSelection
+) -> tuple[CommandStep, ...]:
+    values: list[tuple[str, str, str, str]] = []
+    if selection.ethernet_range is not None:
+        if selection.ethernet_range not in {"144", "199"}:
+            raise ConfigurationError("Ethernet range must be 144 or 199")
+        values.append(
+            (
+                "set-ethernet",
+                "Applying Ethernet range",
+                ETHERNET_PROPERTY,
+                selection.ethernet_range,
+            )
+        )
+    if selection.preview_mode is not None:
+        if selection.preview_mode not in {"1920x1080@30", "1280x720@30"}:
+            raise ConfigurationError("Unsupported preview resolution")
+        values.append(
+            (
+                "set-preview",
+                "Applying preview resolution",
+                PREVIEW_PROPERTY,
+                selection.preview_mode,
+            )
+        )
+    if selection.bitrate_mbps is not None:
+        values.append(
+            (
+                "set-bitrate",
+                "Applying preview bitrate",
+                BITRATE_PROPERTY,
+                mbps_to_bps(selection.bitrate_mbps),
+            )
+        )
+    if selection.encoder is not None:
+        if selection.encoder not in {"h264", "h265"}:
+            raise ConfigurationError("Encoder must be h264 or h265")
+        values.append(
+            (
+                "set-encoder",
+                "Applying preview encoder",
+                ENCODER_PROPERTY,
+                selection.encoder,
+            )
+        )
+    if not values:
+        raise ConfigurationError("Select at least one setting")
+
+    steps = [
+        CommandStep(
+            key,
+            label,
+            "adb",
+            ("-s", serial, "shell", "setprop", property_name, value),
+        )
+        for key, label, property_name, value in values
+    ]
+    steps.append(
+        CommandStep(
+            "sync",
+            "Syncing file system",
+            "adb",
+            ("-s", serial, "shell", "sync"),
+        )
+    )
+    return tuple(steps)
+
+
+def build_adb_reboot_step(serial: str) -> CommandStep:
+    return CommandStep(
+        "adb-reboot",
+        "Rebooting device",
+        "adb",
+        ("-s", serial, "reboot"),
+    )
