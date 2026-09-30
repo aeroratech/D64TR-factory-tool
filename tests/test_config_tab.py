@@ -35,6 +35,7 @@ def start_and_finish_refresh(
     mode="1280x720@30",
     bitrate="2500000",
     encoder="h264",
+    transform="normal",
 ):
     tab.refresh()
     finish_device_probe(factory)
@@ -44,12 +45,13 @@ def start_and_finish_refresh(
             (0, mode, ""),
             (0, bitrate, ""),
             (0, encoder, ""),
+            (0, transform, ""),
         )
     )
 
 
-def test_config_tab_has_four_apply_rows_and_manual_reboot(tab):
-    assert [box.text() for box in tab.apply_checkboxes] == ["Apply"] * 4
+def test_config_tab_has_five_apply_rows_and_manual_reboot(tab):
+    assert [box.text() for box in tab.apply_checkboxes] == ["Apply"] * 5
     assert tab.apply_button.text() == "Apply Selected"
     assert tab.reboot_button.text() == "Reboot Device"
     assert not tab.reboot_button.isEnabled()
@@ -60,6 +62,7 @@ def test_config_tab_editors_start_with_device_defaults(tab):
     assert tab.preview_combo.currentData() == "1280x720@30"
     assert tab.bitrate_edit.text() == "2"
     assert tab.encoder_combo.currentData() == "h264"
+    assert tab.transform_combo.currentData() == "normal"
     assert all(not box.isChecked() for box in tab.apply_checkboxes)
 
 
@@ -103,16 +106,19 @@ def test_refresh_displays_device_defaults_for_empty_properties(
         mode="",
         bitrate="",
         encoder="",
+        transform="",
     )
 
     assert tab.ethernet_current.text() == "199"
     assert tab.preview_current.text() == "1280x720@30"
     assert tab.bitrate_current.text() == "2000000"
     assert tab.encoder_current.text() == "h264"
+    assert tab.transform_current.text() == "0°"
     assert tab.ethernet_combo.currentData() == "199"
     assert tab.preview_combo.currentData() == "1280x720@30"
     assert tab.bitrate_edit.text() == "2"
     assert tab.encoder_combo.currentData() == "h264"
+    assert tab.transform_combo.currentData() == "normal"
     assert all(not box.isChecked() for box in tab.apply_checkboxes)
 
 
@@ -122,6 +128,16 @@ def test_h265_selection_shows_exact_uvc_warning(tab):
     assert "UVC preview is unavailable" in tab.encoder_warning.text()
 
 
+def test_refresh_displays_current_180_degree_transform(
+    tab, fake_runner_factory
+):
+    start_and_finish_refresh(tab, fake_runner_factory, transform="180")
+
+    assert tab.transform_current.text() == "180°"
+    assert tab.transform_combo.currentData() == "180"
+    assert not tab.transform_apply.isChecked()
+
+
 def test_first_show_starts_one_refresh_but_reshow_does_not(
     tab, fake_runner_factory, qtbot
 ):
@@ -129,7 +145,13 @@ def test_first_show_starts_one_refresh_but_reshow_does_not(
     qtbot.waitUntil(lambda: fake_runner_factory.device_probe_count == 1)
     finish_device_probe(fake_runner_factory)
     fake_runner_factory.current.finish(
-        ((0, "144", ""), (0, "1920x1080@30", ""), (0, "10000000", ""), (0, "h264", ""))
+        (
+            (0, "144", ""),
+            (0, "1920x1080@30", ""),
+            (0, "10000000", ""),
+            (0, "h264", ""),
+            (0, "normal", ""),
+        )
     )
 
     tab.hide()
@@ -178,6 +200,18 @@ def test_selected_subset_stops_before_sync_on_failure(
         "set-encoder",
     ]
     assert "Refresh before retrying" in tab.log.toPlainText()
+
+
+def test_transform_can_be_applied_without_adb_root(
+    tab, fake_runner_factory
+):
+    set_combo_data(tab.transform_combo, "180")
+    tab.apply_button.click()
+    finish_device_probe(fake_runner_factory)
+
+    steps = fake_runner_factory.current.current_steps
+    assert [step.key for step in steps] == ["set-transform", "sync"]
+    assert all("root" not in step.arguments for step in steps)
 
 
 def test_apply_success_clears_selection_and_enables_manual_reboot(

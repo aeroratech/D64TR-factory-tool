@@ -28,6 +28,7 @@ from .configuration import (
     DEFAULT_ENCODER,
     DEFAULT_ETHERNET_RANGE,
     DEFAULT_PREVIEW_MODE,
+    DEFAULT_TRANSFORM,
     bps_to_mbps,
     build_adb_reboot_step,
     build_config_apply_steps,
@@ -70,6 +71,7 @@ class ConfigTab(QWidget):
         self.preview_current = QLabel("Unknown")
         self.bitrate_current = QLabel("Unknown")
         self.encoder_current = QLabel("Unknown")
+        self.transform_current = QLabel("Unknown")
 
         self.ethernet_combo = QComboBox()
         self.ethernet_combo.addItem("192.168.144.x", "144")
@@ -82,6 +84,9 @@ class ConfigTab(QWidget):
         self.encoder_combo = QComboBox()
         self.encoder_combo.addItem("H.264", "h264")
         self.encoder_combo.addItem("H.265", "h265")
+        self.transform_combo = QComboBox()
+        self.transform_combo.addItem("0° (Normal)", "normal")
+        self.transform_combo.addItem("180° (Flip)", "180")
 
         self.ethernet_combo.setCurrentIndex(
             self.ethernet_combo.findData(DEFAULT_ETHERNET_RANGE)
@@ -93,16 +98,21 @@ class ConfigTab(QWidget):
         self.encoder_combo.setCurrentIndex(
             self.encoder_combo.findData(DEFAULT_ENCODER)
         )
+        self.transform_combo.setCurrentIndex(
+            self.transform_combo.findData(DEFAULT_TRANSFORM)
+        )
 
         self.ethernet_apply = QCheckBox("Apply")
         self.preview_apply = QCheckBox("Apply")
         self.bitrate_apply = QCheckBox("Apply")
         self.encoder_apply = QCheckBox("Apply")
+        self.transform_apply = QCheckBox("Apply")
         self.apply_checkboxes = [
             self.ethernet_apply,
             self.preview_apply,
             self.bitrate_apply,
             self.encoder_apply,
+            self.transform_apply,
         ]
 
         settings_layout = QGridLayout()
@@ -134,6 +144,12 @@ class ConfigTab(QWidget):
                 self.encoder_combo,
                 self.encoder_apply,
             ),
+            (
+                "Transform",
+                self.transform_current,
+                self.transform_combo,
+                self.transform_apply,
+            ),
         )
         for row, (title, current, editor, checkbox) in enumerate(rows, start=1):
             settings_layout.addWidget(QLabel(title), row, 0)
@@ -144,7 +160,7 @@ class ConfigTab(QWidget):
         self.encoder_warning = QLabel()
         self.encoder_warning.setWordWrap(True)
         self.encoder_warning.setStyleSheet("color: #b45f06;")
-        settings_layout.addWidget(self.encoder_warning, 5, 0, 1, 4)
+        settings_layout.addWidget(self.encoder_warning, 6, 0, 1, 4)
 
         self.settings_group = QGroupBox("Persistent Configuration")
         self.settings_group.setLayout(settings_layout)
@@ -179,6 +195,9 @@ class ConfigTab(QWidget):
             lambda: self.bitrate_apply.setChecked(True)
         )
         self.encoder_combo.currentIndexChanged.connect(self._encoder_changed)
+        self.transform_combo.currentIndexChanged.connect(
+            lambda: self.transform_apply.setChecked(True)
+        )
         self.refresh_button.clicked.connect(self.refresh)
         self.apply_button.clicked.connect(self.apply_selected)
         self.reboot_button.clicked.connect(self.reboot_device)
@@ -253,6 +272,11 @@ class ConfigTab(QWidget):
             encoder=(
                 self.encoder_combo.currentData()
                 if self.encoder_apply.isChecked()
+                else None
+            ),
+            transform=(
+                self.transform_combo.currentData()
+                if self.transform_apply.isChecked()
                 else None
             ),
         )
@@ -341,12 +365,18 @@ class ConfigTab(QWidget):
         self.preview_current.setText(current.preview_mode or "Unknown")
         self.bitrate_current.setText(current.bitrate_bps or "Unknown")
         self.encoder_current.setText(current.encoder or "Unknown")
+        self.transform_current.setText(
+            {"normal": "0°", "180": "180°"}.get(
+                current.transform, current.transform or "Unknown"
+            )
+        )
 
         blockers = [
             QSignalBlocker(self.ethernet_combo),
             QSignalBlocker(self.preview_combo),
             QSignalBlocker(self.bitrate_edit),
             QSignalBlocker(self.encoder_combo),
+            QSignalBlocker(self.transform_combo),
         ]
         self._set_combo_if_known(self.ethernet_combo, current.ethernet_range)
         self._set_combo_if_known(self.preview_combo, current.preview_mode)
@@ -356,6 +386,7 @@ class ConfigTab(QWidget):
             except ConfigurationError:
                 pass
         self._set_combo_if_known(self.encoder_combo, current.encoder)
+        self._set_combo_if_known(self.transform_combo, current.transform)
         del blockers
 
         for checkbox in self.apply_checkboxes:

@@ -184,7 +184,7 @@ lines.
 
 ### Settings UI
 
-The Configuration tab contains four rows. Each row has an `Apply` checkbox and its editor:
+The Configuration tab contains five rows. Each row has an `Apply` checkbox and its editor:
 
 | Setting | Editor | Persistent property | Runtime default |
 | --- | --- | --- | --- |
@@ -192,12 +192,16 @@ The Configuration tab contains four rows. Each row has an `Apply` checkbox and i
 | Preview Resolution | `1920x1080 @ 30 fps` or `1280x720 @ 30 fps` | `persist.video.preview.mode` | `1280x720@30` |
 | Preview Bitrate | Positive decimal Mbps input | `persist.video.preview.bitrate` | `2000000` bps |
 | Encoder | `H.264` or `H.265` | `persist.video.preview.encoder` | `h264` |
+| Transform | `0° (Normal)` or `180° (Flip)` | `[streaming-output]` in `/etc/xdg/weston/weston.ini` | `normal` (0°) |
 
 Editing a row automatically checks it, and the operator may manually include or exclude it. A
-`Refresh` action resolves one ADB device, reads all four properties with `getprop`, populates known
-values, and clears the apply checkboxes. When a successful `getprop` returns an empty value, the UI
-shows and selects the corresponding device runtime default from the table. A failed property read
-remains `Unknown`, so transport and permission errors are not mistaken for unset properties.
+`Refresh` resolves one ADB device, reads four properties with `getprop` plus the Weston transform,
+populates known values, and clears the apply checkboxes. When a successful read returns an empty
+value, the UI shows and selects the corresponding device runtime default from the table. A failed
+read remains `Unknown`, so transport and permission errors are not mistaken for unset settings.
+Transform is read from the Weston streaming-output section. Applying transform directly replaces
+or adds only that section's `transform=normal` or `transform=180` entry; it does not run `adb root`
+and does not modify the other Weston output sections.
 
 Selecting H.265 shows this warning near the encoder control: `UVC preview is unavailable when
 H.265 is configured. Use H.264 when UVC preview is required.`
@@ -229,6 +233,7 @@ adb -s <serial> shell setprop persist.eth0.ip.range 144
 adb -s <serial> shell setprop persist.video.preview.mode 1920x1080@30
 adb -s <serial> shell setprop persist.video.preview.bitrate 10000000
 adb -s <serial> shell setprop persist.video.preview.encoder h264
+adb -s <serial> shell <safe weston.ini streaming-output transform update>
 adb -s <serial> shell sync
 ```
 

@@ -1,5 +1,9 @@
+import shutil
+import subprocess
+
 import pytest
 
+import d64tr_factory_tool.configuration as configuration
 from d64tr_factory_tool.commands import CommandResult
 from d64tr_factory_tool.configuration import (
     ConfigSelection,
@@ -11,6 +15,23 @@ from d64tr_factory_tool.configuration import (
     current_config_from_results,
     mbps_to_bps,
 )
+
+
+requires_posix_tools = pytest.mark.skipif(
+    shutil.which("sh") is None or shutil.which("awk") is None,
+    reason="Weston command behavior requires host sh and awk",
+)
+
+
+def run_remote_shell_step(step):
+    assert step.arguments[:3] == ("-s", "SER", "shell")
+    assert len(step.arguments) == 4
+    return subprocess.run(
+        ("sh", "-c", step.arguments[3]),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 @pytest.mark.parametrize(
@@ -110,6 +131,17 @@ def test_apply_plan_with_all_settings_uses_documented_values():
     ]
 
 
+def test_apply_plan_adds_transform_before_one_sync_without_adb_root():
+    steps = build_config_apply_steps(
+        "SER", ConfigSelection(transform="180")
+    )
+
+    assert [step.key for step in steps] == ["set-transform", "sync"]
+    assert steps[0].arguments[:3] == ("-s", "SER", "shell")
+    assert len(steps[0].arguments) == 4
+    assert all("root" not in step.arguments for step in steps)
+
+
 def test_apply_plan_rejects_empty_selection_before_building_commands():
     with pytest.raises(ConfigurationError, match="Select at least one"):
         build_config_apply_steps("SER", ConfigSelection())
@@ -128,6 +160,11 @@ def test_apply_plan_rejects_undocumented_choice_values(selection):
         build_config_apply_steps("SER", selection)
 
 
+def test_apply_plan_rejects_unsupported_transform():
+    with pytest.raises(ConfigurationError):
+        build_config_apply_steps("SER", ConfigSelection(transform="90"))
+
+
 def test_read_plan_has_documented_properties_in_ui_order():
     steps = build_config_read_steps("SER")
 
@@ -136,13 +173,15 @@ def test_read_plan_has_documented_properties_in_ui_order():
         "read-preview",
         "read-bitrate",
         "read-encoder",
+        "read-transform",
     ]
-    assert [step.arguments[-1] for step in steps] == [
+    assert [step.arguments[-1] for step in steps[:4]] == [
         "persist.eth0.ip.range",
         "persist.video.preview.mode",
         "persist.video.preview.bitrate",
         "persist.video.preview.encoder",
     ]
+    assert "/etc/xdg/weston/weston.ini" in steps[4].arguments[-1]
     assert all(step.continue_on_error for step in steps)
 
 
@@ -173,6 +212,7 @@ def test_current_config_uses_device_defaults_when_all_properties_are_empty():
     assert current.preview_mode == "1280x720@30"
     assert current.bitrate_bps == "2000000"
     assert current.encoder == "h264"
+    assert current.transform == "normal"
 
 
 def test_current_config_uses_step_keys_not_result_position():
@@ -185,6 +225,89 @@ def test_current_config_uses_step_keys_not_result_position():
     assert current.ethernet_range == "144"
     assert current.encoder == "h265"
     assert current.preview_mode is None
+
+
+@requires_posix_tools
+def test_transform_read_script_reads_only_streaming_output(tmp_path):
+    config = tmp_path / "weston.ini"
+    config.write_text(
+        "[streaming-output]\n"
+        "name=Virtual-720P\n"
+        "transform=180\n"
+        "[output]\n"
+        "name=DSI-1\n"
+        "transform=90\n"
+    )
+    step = configuration.build_weston_transform_read_step("SER", str(config))
+
+    completed = run_remote_shell_step(step)
+
+    assert completed.returncode == 0
+    assert completed.stdout == "180\n"
+
+
+@requires_posix_tools
+def test_transform_update_script_replaces_only_streaming_output_value(tmp_path):
+    config = tmp_path / "weston.ini"
+    config.write_text(
+        "[streaming-output]\n"
+        "name=Virtual-720P\n"
+        "transform=normal\n"
+        "[output]\n"
+        "name=DSI-1\n"
+        "transform=90\n"
+    )
+    step = configuration.build_weston_transform_step("SER", "180", str(config))
+
+    completed = run_remote_shell_step(step)
+
+    assert completed.returncode == 0
+    assert config.read_text() == (
+        "[streaming-output]\n"
+        "name=Virtual-720P\n"
+        "transform=180\n"
+        "[output]\n"
+        "name=DSI-1\n"
+        "transform=90\n"
+    )
+
+
+@requires_posix_tools
+def test_transform_update_script_adds_missing_value_before_next_section(tmp_path):
+    config = tmp_path / "weston.ini"
+    config.write_text(
+        "[streaming-output]\n"
+        "name=Virtual-720P\n"
+        "\n"
+        "[output]\n"
+        "name=DSI-1\n"
+    )
+    step = configuration.build_weston_transform_step("SER", "180", str(config))
+
+    completed = run_remote_shell_step(step)
+
+    assert completed.returncode == 0
+    assert config.read_text() == (
+        "[streaming-output]\n"
+        "name=Virtual-720P\n"
+        "\n"
+        "transform=180\n"
+        "[output]\n"
+        "name=DSI-1\n"
+    )
+
+
+@requires_posix_tools
+def test_transform_update_script_refuses_file_without_streaming_output(tmp_path):
+    config = tmp_path / "weston.ini"
+    original = "[output]\nname=DSI-1\ntransform=90\n"
+    config.write_text(original)
+    step = configuration.build_weston_transform_step("SER", "180", str(config))
+
+    completed = run_remote_shell_step(step)
+
+    assert completed.returncode != 0
+    assert config.read_text() == original
 
 
 def test_adb_reboot_step_targets_serial():

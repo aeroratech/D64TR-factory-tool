@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -11,11 +12,13 @@ ETHERNET_PROPERTY = "persist.eth0.ip.range"
 PREVIEW_PROPERTY = "persist.video.preview.mode"
 BITRATE_PROPERTY = "persist.video.preview.bitrate"
 ENCODER_PROPERTY = "persist.video.preview.encoder"
+WESTON_CONFIG_PATH = "/etc/xdg/weston/weston.ini"
 
 DEFAULT_ETHERNET_RANGE = "199"
 DEFAULT_PREVIEW_MODE = "1280x720@30"
 DEFAULT_BITRATE_BPS = "2000000"
 DEFAULT_ENCODER = "h264"
+DEFAULT_TRANSFORM = "normal"
 
 # These match the target services' runtime fallbacks when a property is unset.
 _READ_DEFAULTS = {
@@ -23,7 +26,60 @@ _READ_DEFAULTS = {
     "read-preview": DEFAULT_PREVIEW_MODE,
     "read-bitrate": DEFAULT_BITRATE_BPS,
     "read-encoder": DEFAULT_ENCODER,
+    "read-transform": DEFAULT_TRANSFORM,
 }
+
+_WESTON_TRANSFORM_READ_SCRIPT = r"""awk '
+BEGIN { in_streaming = 0; found_section = 0 }
+/^[[:space:]]*\[[^]]+\][[:space:]]*$/ {
+    if (in_streaming) exit
+    in_streaming = ($0 ~ /^[[:space:]]*\[streaming-output\][[:space:]]*$/)
+    if (in_streaming) found_section = 1
+    next
+}
+in_streaming && /^[[:space:]]*transform[[:space:]]*=/ {
+    value = $0
+    sub(/^[^=]*=[[:space:]]*/, "", value)
+    sub(/[[:space:]]*$/, "", value)
+    print value
+    exit
+}
+END { if (!found_section) exit 42 }
+' "$1"
+""".strip()
+
+_WESTON_TRANSFORM_UPDATE_SCRIPT = r"""file=$1
+value=$2
+tmp="${file}.factory-tool.$$"
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+awk -v value="$value" '
+BEGIN { in_streaming = 0; found_section = 0; wrote = 0 }
+function write_transform() {
+    if (!wrote) {
+        print "transform=" value
+        wrote = 1
+    }
+}
+/^[[:space:]]*\[[^]]+\][[:space:]]*$/ {
+    if (in_streaming) write_transform()
+    in_streaming = ($0 ~ /^[[:space:]]*\[streaming-output\][[:space:]]*$/)
+    if (in_streaming) {
+        found_section = 1
+        wrote = 0
+    }
+}
+in_streaming && /^[[:space:]]*transform[[:space:]]*=/ {
+    write_transform()
+    next
+}
+{ print }
+END {
+    if (in_streaming) write_transform()
+    if (!found_section) exit 42
+}
+' "$file" > "$tmp" || exit $?
+cat "$tmp" > "$file"
+""".strip()
 
 
 @dataclass(frozen=True)
@@ -32,6 +88,7 @@ class ConfigSelection:
     preview_mode: str | None = None
     bitrate_mbps: str | None = None
     encoder: str | None = None
+    transform: str | None = None
 
 
 @dataclass(frozen=True)
@@ -40,10 +97,15 @@ class CurrentConfig:
     preview_mode: str | None = None
     bitrate_bps: str | None = None
     encoder: str | None = None
+    transform: str | None = None
 
 
 class ConfigurationError(ValueError):
     """Raised when selected configuration cannot be safely applied."""
+
+
+def _remote_sh_command(script: str, *arguments: str) -> str:
+    return shlex.join(("sh", "-c", script, "factory-tool", *arguments))
 
 
 def _positive_decimal(text: str, unit: str) -> Decimal:
@@ -74,6 +136,45 @@ def bps_to_mbps(text: str) -> str:
     return format(mbps.normalize(), "f")
 
 
+def build_weston_transform_read_step(
+    serial: str, config_path: str = WESTON_CONFIG_PATH
+) -> CommandStep:
+    return CommandStep(
+        "read-transform",
+        "Reading preview transform",
+        "adb",
+        (
+            "-s",
+            serial,
+            "shell",
+            _remote_sh_command(_WESTON_TRANSFORM_READ_SCRIPT, config_path),
+        ),
+        continue_on_error=True,
+    )
+
+
+def build_weston_transform_step(
+    serial: str,
+    transform: str,
+    config_path: str = WESTON_CONFIG_PATH,
+) -> CommandStep:
+    if transform not in {"normal", "180"}:
+        raise ConfigurationError("Transform must be normal or 180")
+    return CommandStep(
+        "set-transform",
+        "Applying preview transform",
+        "adb",
+        (
+            "-s",
+            serial,
+            "shell",
+            _remote_sh_command(
+                _WESTON_TRANSFORM_UPDATE_SCRIPT, config_path, transform
+            ),
+        ),
+    )
+
+
 def build_config_read_steps(serial: str) -> tuple[CommandStep, ...]:
     settings = (
         ("read-ethernet", "Reading Ethernet range", ETHERNET_PROPERTY),
@@ -81,7 +182,7 @@ def build_config_read_steps(serial: str) -> tuple[CommandStep, ...]:
         ("read-bitrate", "Reading preview bitrate", BITRATE_PROPERTY),
         ("read-encoder", "Reading preview encoder", ENCODER_PROPERTY),
     )
-    return tuple(
+    property_steps = tuple(
         CommandStep(
             key,
             label,
@@ -91,6 +192,7 @@ def build_config_read_steps(serial: str) -> tuple[CommandStep, ...]:
         )
         for key, label, property_name in settings
     )
+    return property_steps + (build_weston_transform_read_step(serial),)
 
 
 def current_config_from_results(results: Sequence[CommandResult]) -> CurrentConfig:
@@ -99,6 +201,7 @@ def current_config_from_results(results: Sequence[CommandResult]) -> CurrentConf
         "read-preview": None,
         "read-bitrate": None,
         "read-encoder": None,
+        "read-transform": None,
     }
     for result in results:
         if result.step.key in values and result.success:
@@ -109,6 +212,7 @@ def current_config_from_results(results: Sequence[CommandResult]) -> CurrentConf
         preview_mode=values["read-preview"],
         bitrate_bps=values["read-bitrate"],
         encoder=values["read-encoder"],
+        transform=values["read-transform"],
     )
 
 
@@ -158,7 +262,7 @@ def build_config_apply_steps(
                 selection.encoder,
             )
         )
-    if not values:
+    if not values and selection.transform is None:
         raise ConfigurationError("Select at least one setting")
 
     steps = [
@@ -170,6 +274,8 @@ def build_config_apply_steps(
         )
         for key, label, property_name, value in values
     ]
+    if selection.transform is not None:
+        steps.append(build_weston_transform_step(serial, selection.transform))
     steps.append(
         CommandStep(
             "sync",

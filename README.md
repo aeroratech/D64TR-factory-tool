@@ -77,10 +77,14 @@ combination of rows and click **Apply Selected**:
 - Preview Resolution: `1920×1080 @ 30 fps` or `1280×720 @ 30 fps`
 - Preview Bitrate: any positive Mbps value that converts to a whole number of bps, such as `2.5`
 - Encoder: H.264 or H.265
+- Transform: 0° (normal) or 180° (flipped)
 
 When a property is readable but unset, the page shows the device runtime default: Ethernet range
 `199`, preview mode `1280×720 @ 30 fps`, bitrate `2 Mbps`, and encoder H.264. A property read that
 fails still shows `Unknown` so a connection or permission error is not mistaken for a default.
+Transform is read from the `[streaming-output]` section of
+`/etc/xdg/weston/weston.ini`. A missing `transform` entry defaults to 0°. Applying it replaces the
+existing entry or adds one to that section without changing other Weston outputs.
 
 Editing a row automatically checks its Apply box. Only checked rows are written. The tool validates
 the whole selection first, executes the corresponding `setprop` commands, and runs `sync` once.
