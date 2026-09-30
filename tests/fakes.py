@@ -105,6 +105,7 @@ class FakeCommandRunner(QObject):
         self.current_steps: tuple = ()
         self.busy = False
         self.cancelled = False
+        self.executed_step_keys: list[str] = []
 
     def start(self, steps) -> None:
         if self.busy:
@@ -117,6 +118,7 @@ class FakeCommandRunner(QObject):
         results = []
         for step, outcome in zip(self.current_steps, outcomes):
             exit_code, stdout, stderr = outcome
+            self.executed_step_keys.append(step.key)
             result = CommandResult(step, exit_code, stdout, stderr)
             results.append(result)
             if stdout:
@@ -165,3 +167,12 @@ class FakeRunnerFactory:
     @property
     def current(self) -> FakeCommandRunner:
         return self.instances[-1]
+
+    @property
+    def device_probe_count(self) -> int:
+        return sum(
+            1
+            for runner in self.instances
+            for queue in runner.started
+            if queue and queue[0].key == "probe-adb"
+        )
