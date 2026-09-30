@@ -130,6 +130,22 @@ class FakeCommandRunner(QObject):
         self.queue_finished.emit(queue_result)
         return queue_result
 
+    def fail_to_start(self, message: str) -> QueueResult:
+        step = self.current_steps[0]
+        result = CommandResult(
+            step,
+            -1,
+            "",
+            "",
+            process_error=message,
+        )
+        self.step_finished.emit(result)
+        queue_result = QueueResult((result,))
+        self.busy = False
+        self.current_steps = ()
+        self.queue_finished.emit(queue_result)
+        return queue_result
+
     def cancel(self) -> None:
         self.cancelled = True
         if self.busy:
