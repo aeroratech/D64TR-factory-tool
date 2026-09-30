@@ -146,7 +146,7 @@ def test_read_plan_has_documented_properties_in_ui_order():
     assert all(step.continue_on_error for step in steps)
 
 
-def test_current_config_maps_successful_results_and_keeps_unknowns_explicit():
+def test_current_config_uses_default_for_empty_value_and_keeps_failures_unknown():
     steps = build_config_read_steps("SER")
     results = (
         CommandResult(steps[0], 0, " 199\n", ""),
@@ -158,8 +158,20 @@ def test_current_config_maps_successful_results_and_keeps_unknowns_explicit():
     current = current_config_from_results(results)
 
     assert current.ethernet_range == "199"
-    assert current.preview_mode is None
+    assert current.preview_mode == "1280x720@30"
     assert current.bitrate_bps is None
+    assert current.encoder == "h264"
+
+
+def test_current_config_uses_device_defaults_when_all_properties_are_empty():
+    steps = build_config_read_steps("SER")
+    results = tuple(CommandResult(step, 0, "\n", "") for step in steps)
+
+    current = current_config_from_results(results)
+
+    assert current.ethernet_range == "199"
+    assert current.preview_mode == "1280x720@30"
+    assert current.bitrate_bps == "2000000"
     assert current.encoder == "h264"
 
 

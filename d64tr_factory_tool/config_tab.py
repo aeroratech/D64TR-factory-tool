@@ -24,6 +24,10 @@ from .configuration import (
     ConfigSelection,
     ConfigurationError,
     CurrentConfig,
+    DEFAULT_BITRATE_BPS,
+    DEFAULT_ENCODER,
+    DEFAULT_ETHERNET_RANGE,
+    DEFAULT_PREVIEW_MODE,
     bps_to_mbps,
     build_adb_reboot_step,
     build_config_apply_steps,
@@ -78,6 +82,17 @@ class ConfigTab(QWidget):
         self.encoder_combo = QComboBox()
         self.encoder_combo.addItem("H.264", "h264")
         self.encoder_combo.addItem("H.265", "h265")
+
+        self.ethernet_combo.setCurrentIndex(
+            self.ethernet_combo.findData(DEFAULT_ETHERNET_RANGE)
+        )
+        self.preview_combo.setCurrentIndex(
+            self.preview_combo.findData(DEFAULT_PREVIEW_MODE)
+        )
+        self.bitrate_edit.setText(bps_to_mbps(DEFAULT_BITRATE_BPS))
+        self.encoder_combo.setCurrentIndex(
+            self.encoder_combo.findData(DEFAULT_ENCODER)
+        )
 
         self.ethernet_apply = QCheckBox("Apply")
         self.preview_apply = QCheckBox("Apply")

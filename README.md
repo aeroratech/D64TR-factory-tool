@@ -78,6 +78,10 @@ combination of rows and click **Apply Selected**:
 - Preview Bitrate: any positive Mbps value that converts to a whole number of bps, such as `2.5`
 - Encoder: H.264 or H.265
 
+When a property is readable but unset, the page shows the device runtime default: Ethernet range
+`199`, preview mode `1280×720 @ 30 fps`, bitrate `2 Mbps`, and encoder H.264. A property read that
+fails still shows `Unknown` so a connection or permission error is not mistaken for a default.
+
 Editing a row automatically checks its Apply box. Only checked rows are written. The tool validates
 the whole selection first, executes the corresponding `setprop` commands, and runs `sync` once.
 After a successful batch, click **Reboot Device** to activate the new settings.

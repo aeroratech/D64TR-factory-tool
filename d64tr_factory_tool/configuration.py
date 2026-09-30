@@ -12,6 +12,19 @@ PREVIEW_PROPERTY = "persist.video.preview.mode"
 BITRATE_PROPERTY = "persist.video.preview.bitrate"
 ENCODER_PROPERTY = "persist.video.preview.encoder"
 
+DEFAULT_ETHERNET_RANGE = "199"
+DEFAULT_PREVIEW_MODE = "1280x720@30"
+DEFAULT_BITRATE_BPS = "2000000"
+DEFAULT_ENCODER = "h264"
+
+# These match the target services' runtime fallbacks when a property is unset.
+_READ_DEFAULTS = {
+    "read-ethernet": DEFAULT_ETHERNET_RANGE,
+    "read-preview": DEFAULT_PREVIEW_MODE,
+    "read-bitrate": DEFAULT_BITRATE_BPS,
+    "read-encoder": DEFAULT_ENCODER,
+}
+
 
 @dataclass(frozen=True)
 class ConfigSelection:
@@ -90,7 +103,7 @@ def current_config_from_results(results: Sequence[CommandResult]) -> CurrentConf
     for result in results:
         if result.step.key in values and result.success:
             value = result.stdout.strip()
-            values[result.step.key] = value or None
+            values[result.step.key] = value or _READ_DEFAULTS[result.step.key]
     return CurrentConfig(
         ethernet_range=values["read-ethernet"],
         preview_mode=values["read-preview"],

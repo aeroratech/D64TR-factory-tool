@@ -55,6 +55,14 @@ def test_config_tab_has_four_apply_rows_and_manual_reboot(tab):
     assert not tab.reboot_button.isEnabled()
 
 
+def test_config_tab_editors_start_with_device_defaults(tab):
+    assert tab.ethernet_combo.currentData() == "199"
+    assert tab.preview_combo.currentData() == "1280x720@30"
+    assert tab.bitrate_edit.text() == "2"
+    assert tab.encoder_combo.currentData() == "h264"
+    assert all(not box.isChecked() for box in tab.apply_checkboxes)
+
+
 def test_user_edit_automatically_checks_only_that_row(tab):
     tab.bitrate_edit.setText("2.5")
 
@@ -83,6 +91,29 @@ def test_refresh_displays_unknown_raw_value_without_overwriting_editor(
     assert tab.preview_current.text() == "custom-mode"
     assert tab.preview_combo.currentData() == original
     assert not tab.preview_apply.isChecked()
+
+
+def test_refresh_displays_device_defaults_for_empty_properties(
+    tab, fake_runner_factory
+):
+    start_and_finish_refresh(
+        tab,
+        fake_runner_factory,
+        ethernet="",
+        mode="",
+        bitrate="",
+        encoder="",
+    )
+
+    assert tab.ethernet_current.text() == "199"
+    assert tab.preview_current.text() == "1280x720@30"
+    assert tab.bitrate_current.text() == "2000000"
+    assert tab.encoder_current.text() == "h264"
+    assert tab.ethernet_combo.currentData() == "199"
+    assert tab.preview_combo.currentData() == "1280x720@30"
+    assert tab.bitrate_edit.text() == "2"
+    assert tab.encoder_combo.currentData() == "h264"
+    assert all(not box.isChecked() for box in tab.apply_checkboxes)
 
 
 def test_h265_selection_shows_exact_uvc_warning(tab):
@@ -128,7 +159,7 @@ def test_empty_selection_starts_no_apply_queue(tab, fake_runner_factory):
 def test_selected_subset_stops_before_sync_on_failure(
     tab, fake_runner_factory
 ):
-    set_combo_data(tab.ethernet_combo, "199")
+    set_combo_data(tab.ethernet_combo, "144")
     set_combo_data(tab.encoder_combo, "h265")
     tab.apply_button.click()
     finish_device_probe(fake_runner_factory)
@@ -152,7 +183,7 @@ def test_selected_subset_stops_before_sync_on_failure(
 def test_apply_success_clears_selection_and_enables_manual_reboot(
     tab, fake_runner_factory
 ):
-    set_combo_data(tab.ethernet_combo, "199")
+    set_combo_data(tab.ethernet_combo, "144")
     tab.apply_button.click()
     finish_device_probe(fake_runner_factory)
     fake_runner_factory.current.finish(((0, "", ""), (0, "", "")))
@@ -169,7 +200,7 @@ def test_apply_success_clears_selection_and_enables_manual_reboot(
 def test_reboot_resolves_and_targets_the_current_adb_serial(
     tab, fake_runner_factory
 ):
-    set_combo_data(tab.ethernet_combo, "199")
+    set_combo_data(tab.ethernet_combo, "144")
     tab.apply_button.click()
     finish_device_probe(fake_runner_factory)
     fake_runner_factory.current.finish(((0, "", ""), (0, "", "")))
@@ -185,7 +216,7 @@ def test_reboot_resolves_and_targets_the_current_adb_serial(
 
 
 def test_apply_device_selection_error_restores_controls(tab, fake_runner_factory):
-    set_combo_data(tab.ethernet_combo, "199")
+    set_combo_data(tab.ethernet_combo, "144")
     tab.apply_button.click()
     fake_runner_factory.current.finish(
         ((0, "List of devices attached\nA\tdevice\nB\tdevice\n", ""),)

@@ -186,17 +186,18 @@ lines.
 
 The Configuration tab contains four rows. Each row has an `Apply` checkbox and its editor:
 
-| Setting | Editor | Persistent property |
-| --- | --- | --- |
-| Ethernet Range | `192.168.144.x` or `192.168.199.x` | `persist.eth0.ip.range` |
-| Preview Resolution | `1920x1080 @ 30 fps` or `1280x720 @ 30 fps` | `persist.video.preview.mode` |
-| Preview Bitrate | Positive decimal Mbps input | `persist.video.preview.bitrate` |
-| Encoder | `H.264` or `H.265` | `persist.video.preview.encoder` |
+| Setting | Editor | Persistent property | Runtime default |
+| --- | --- | --- | --- |
+| Ethernet Range | `192.168.144.x` or `192.168.199.x` | `persist.eth0.ip.range` | `199` |
+| Preview Resolution | `1920x1080 @ 30 fps` or `1280x720 @ 30 fps` | `persist.video.preview.mode` | `1280x720@30` |
+| Preview Bitrate | Positive decimal Mbps input | `persist.video.preview.bitrate` | `2000000` bps |
+| Encoder | `H.264` or `H.265` | `persist.video.preview.encoder` | `h264` |
 
 Editing a row automatically checks it, and the operator may manually include or exclude it. A
 `Refresh` action resolves one ADB device, reads all four properties with `getprop`, populates known
-values, and clears the apply checkboxes. Unknown or empty device values are shown without silently
-substituting and selecting a default for application.
+values, and clears the apply checkboxes. When a successful `getprop` returns an empty value, the UI
+shows and selects the corresponding device runtime default from the table. A failed property read
+remains `Unknown`, so transport and permission errors are not mistaken for unset properties.
 
 Selecting H.265 shows this warning near the encoder control: `UVC preview is unavailable when
 H.265 is configured. Use H.264 when UVC preview is required.`
