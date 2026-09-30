@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QByteArray, QObject, QProcess, Signal
 
+from d64tr_factory_tool.commands import CommandResult, QueueResult
+
 
 class FakeProcess(QObject):
     readyReadStandardOutput = Signal()
@@ -89,3 +91,61 @@ class FakeProcessFactory:
 
     def fail_current_to_start(self, message: str) -> None:
         self.current.fail_to_start(message)
+
+
+class FakeCommandRunner(QObject):
+    step_started = Signal(object)
+    output_received = Signal(str, str)
+    step_finished = Signal(object)
+    queue_finished = Signal(object)
+
+    def __init__(self):
+        super().__init__()
+        self.started: list[tuple] = []
+        self.current_steps: tuple = ()
+        self.busy = False
+        self.cancelled = False
+
+    def start(self, steps) -> None:
+        if self.busy:
+            raise RuntimeError("Fake runner is already running")
+        self.current_steps = tuple(steps)
+        self.started.append(self.current_steps)
+        self.busy = True
+
+    def finish(self, outcomes) -> QueueResult:
+        results = []
+        for step, outcome in zip(self.current_steps, outcomes):
+            exit_code, stdout, stderr = outcome
+            result = CommandResult(step, exit_code, stdout, stderr)
+            results.append(result)
+            if stdout:
+                self.output_received.emit("stdout", stdout)
+            if stderr:
+                self.output_received.emit("stderr", stderr)
+            self.step_finished.emit(result)
+        queue_result = QueueResult(tuple(results))
+        self.busy = False
+        self.current_steps = ()
+        self.queue_finished.emit(queue_result)
+        return queue_result
+
+    def cancel(self) -> None:
+        self.cancelled = True
+        if self.busy:
+            self.busy = False
+            self.queue_finished.emit(QueueResult((), cancelled=True))
+
+
+class FakeRunnerFactory:
+    def __init__(self):
+        self.instances: list[FakeCommandRunner] = []
+
+    def __call__(self) -> FakeCommandRunner:
+        runner = FakeCommandRunner()
+        self.instances.append(runner)
+        return runner
+
+    @property
+    def current(self) -> FakeCommandRunner:
+        return self.instances[-1]
