@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QCloseEvent, QGuiApplication, QShowEvent
+from PySide6.QtGui import QCloseEvent, QGuiApplication, QIcon, QShowEvent
 from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget
 
 from .config_tab import ConfigTab
@@ -12,6 +13,7 @@ from .update_tab import UpdateTab
 
 
 TabFactory = Callable[[], QWidget]
+ICON_PATH = Path(__file__).resolve().parent / "assets" / "d64tr-icon.png"
 
 
 class MainWindow(QMainWindow):
@@ -21,6 +23,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.setWindowTitle("D64TR Factory Tool")
+        self.setWindowIcon(QIcon(str(ICON_PATH)))
         self.resize(760, 680)
         self._shutdown_complete = False
 

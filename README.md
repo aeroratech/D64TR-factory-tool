@@ -111,7 +111,11 @@ Fastboot tools.
 ## Build a Single-file Executable
 
 ```bash
-python -m PyInstaller --clean --onefile --windowed --name d64tr-factory-tool main.py
+python -m PyInstaller --clean --onefile --windowed \
+  --name d64tr-factory-tool \
+  --icon d64tr_factory_tool/assets/d64tr-icon.ico \
+  --add-data "d64tr_factory_tool/assets/d64tr-icon.png:d64tr_factory_tool/assets" \
+  main.py
 ```
 
 The executable is written under `dist/`. GitHub Actions runs the tests and produces a versioned

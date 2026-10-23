@@ -36,6 +36,14 @@ def test_main_window_has_exactly_three_tabs_in_required_order(qtbot):
     ]
 
 
+def test_main_window_uses_application_icon(qtbot):
+    created_tabs = []
+    window = MainWindow(tab_factories=make_factories(created_tabs))
+    qtbot.addWidget(window)
+
+    assert not window.windowIcon().isNull()
+
+
 def test_close_shuts_down_every_tab_once(qtbot):
     created_tabs = []
     window = MainWindow(tab_factories=make_factories(created_tabs))
