@@ -1,11 +1,12 @@
 # D64TR Factory Tool
 
 Desktop factory utility for one D64TR camera connected over ADB or Fastboot. The PySide6
-application provides three workflows:
+application provides four workflows:
 
 - **Info** reads camera and gimbal versions.
 - **Update** validates and flashes a D64TR image package.
 - **Configuration** reads and updates persistent Ethernet and preview-stream settings.
+- **TEST** checks SD card mounting and read/write functionality.
 
 The UI and all device operations are asynchronous, so long Fastboot transfers do not freeze the
 window. Destructive operations stop on their first failed command.
@@ -96,7 +97,15 @@ After a successful batch, click **Reboot Device** to activate the new settings.
 The persistent properties follow the
 [OpenMAVCam Configuration documentation](https://openmavcam.github.io/docs/api-reference/configuration-interfaces).
 
-## Test
+## TEST
+
+Click **SDCard Test** to check that `/mnt/sdcard` is mounted, then write `TEST_OK`
+to `/mnt/sdcard/test.tmp`, read it back with `grep`, and remove the temporary file.
+The button shows a green ✓ when both checks succeed, or a red ✗ on failure.
+The log reports the test progress and command errors. This follows the SAMO factory
+tool's SD card test procedure.
+
+## Automated Tests
 
 Install development dependencies and run the hardware-independent suite:
 

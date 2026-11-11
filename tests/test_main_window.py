@@ -19,20 +19,21 @@ def make_factories(created_tabs):
         created_tabs.append(tab)
         return tab
 
-    return (factory, factory, factory)
+    return (factory, factory, factory, factory)
 
 
-def test_main_window_has_exactly_three_tabs_in_required_order(qtbot):
+def test_main_window_has_four_tabs_in_required_order(qtbot):
     created_tabs = []
     window = MainWindow(tab_factories=make_factories(created_tabs))
     qtbot.addWidget(window)
 
     assert window.windowTitle() == "D64TR Factory Tool"
-    assert window.tabs.count() == 3
-    assert [window.tabs.tabText(i) for i in range(3)] == [
+    assert window.tabs.count() == 4
+    assert [window.tabs.tabText(i) for i in range(4)] == [
         "Info",
         "Update",
         "Configuration",
+        "TEST",
     ]
 
 
@@ -56,9 +57,10 @@ def test_close_shuts_down_every_tab_once(qtbot):
     assert all(tab.started_after_shutdown == 0 for tab in created_tabs)
 
 
-def test_default_window_builds_real_tabs_without_hidden_test_tab(qtbot):
+def test_default_window_builds_real_tabs_including_test_tab(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
 
-    assert window.tabs.count() == 3
-    assert all(window.tabs.isTabVisible(index) for index in range(3))
+    assert window.tabs.count() == 4
+    assert all(window.tabs.isTabVisible(index) for index in range(4))
+    assert window.tabs.widget(3).sdcard_button.text() == "SDCard Test"

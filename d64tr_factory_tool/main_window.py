@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget
 
 from .config_tab import ConfigTab
 from .info_tab import InfoTab
+from .test_tab import TestTab
 from .update_tab import UpdateTab
 
 
@@ -19,7 +20,7 @@ ICON_PATH = Path(__file__).resolve().parent / "assets" / "d64tr-icon.png"
 class MainWindow(QMainWindow):
     def __init__(
         self,
-        tab_factories: tuple[TabFactory, TabFactory, TabFactory] | None = None,
+        tab_factories: tuple[TabFactory, TabFactory, TabFactory, TabFactory] | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("D64TR Factory Tool")
@@ -27,12 +28,13 @@ class MainWindow(QMainWindow):
         self.resize(760, 680)
         self._shutdown_complete = False
 
-        factories = tab_factories or (InfoTab, UpdateTab, ConfigTab)
+        factories = tab_factories or (InfoTab, UpdateTab, ConfigTab, TestTab)
         self._tab_widgets = tuple(factory() for factory in factories)
         self.tabs = QTabWidget()
         self.tabs.addTab(self._tab_widgets[0], "Info")
         self.tabs.addTab(self._tab_widgets[1], "Update")
         self.tabs.addTab(self._tab_widgets[2], "Configuration")
+        self.tabs.addTab(self._tab_widgets[3], "TEST")
         self.setCentralWidget(self.tabs)
 
     def showEvent(self, event: QShowEvent) -> None:
